@@ -250,10 +250,6 @@ CATEGORICAL = [
 
 st.markdown('<div class="exec-kicker">Executive Banking Intelligence</div>', unsafe_allow_html=True)
 st.title("Loan Application Dashboard")
-st.markdown(
-    '<div class="exec-subtitle">Portfolio performance, applicant quality and credit-risk indicators at a glance.</div>',
-    unsafe_allow_html=True
-)
 
 with st.sidebar:
     st.markdown(
