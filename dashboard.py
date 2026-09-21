@@ -249,7 +249,11 @@ CATEGORICAL = [
 ]
 
 st.markdown('<div class="exec-kicker">Executive Banking Intelligence</div>', unsafe_allow_html=True)
-st.title("Loan Application Dashboard")
+st.title("Loan Portfolio Executive Dashboard")
+st.markdown(
+    '<div class="exec-subtitle">Portfolio performance, applicant quality and credit-risk indicators at a glance.</div>',
+    unsafe_allow_html=True
+)
 
 with st.sidebar:
     st.markdown(
@@ -470,40 +474,42 @@ with tab2:
 with tab3:
     st.subheader("Financial and Loan Characteristics")
 
+    status_color_map = {
+        "Approved": BANK_GREEN,
+        "Rejected": BANK_RED,
+        "Review": "#9aa6b2",
+    }
+
+    def violin_by_status(y_col, title):
+        fig = px.violin(
+            filtered, x="loan_status_display", y=y_col,
+            color="loan_status_display",
+            color_discrete_map=status_color_map,
+            box=True, points=False,
+            title=title
+        )
+        fig.update_traces(meanline_visible=True, showlegend=False)
+        banking_layout(fig)
+        return fig
+
     col1, col2 = st.columns(2)
 
     with col1:
-        fig = px.box(
-            filtered, x="loan_status_display", y="credit_score",
-            points="outliers", title="Credit Score by Loan Status"
-        )
-        banking_layout(fig)
+        fig = violin_by_status("credit_score", "Credit Score by Loan Status")
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        fig = px.box(
-            filtered, x="loan_status_display", y="annual_income",
-            points="outliers", title="Annual Income by Loan Status"
-        )
-        banking_layout(fig)
+        fig = violin_by_status("annual_income", "Annual Income by Loan Status")
         st.plotly_chart(fig, use_container_width=True)
 
     col1, col2 = st.columns(2)
 
     with col1:
-        fig = px.box(
-            filtered, x="loan_status_display", y="loan_amount",
-            points="outliers", title="Loan Amount by Loan Status"
-        )
-        banking_layout(fig)
+        fig = violin_by_status("loan_amount", "Loan Amount by Loan Status")
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        fig = px.box(
-            filtered, x="loan_status_display", y="debt_to_income_ratio",
-            points="outliers", title="Debt-to-Income Ratio by Loan Status"
-        )
-        banking_layout(fig)
+        fig = violin_by_status("debt_to_income_ratio", "Debt-to-Income Ratio by Loan Status")
         st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Credit Score vs Loan Amount")
