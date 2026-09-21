@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from scipy.stats import f_oneway, chi2_contingency
 
 st.set_page_config(
     page_title="Loan Approval EDA Dashboard",
@@ -302,9 +303,9 @@ c5.metric("Approval Rate", f"{approval_rate:.1f}%")
 
 st.divider()
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     " Overview", " Applicant Profile", " Financial Analysis",
-    " Correlations", " Data Quality"
+    " Correlations", " Data Quality", " Driver Analysis"
 ])
 
 def banking_layout(fig, height=None):
@@ -614,6 +615,102 @@ with tab5:
         missing.style.format({"Missing %": "{:.2f}%"}),
         use_container_width=True,
         hide_index=True
+    )
+
+with tab6:
+    st.subheader("Driver Analysis — Does Any Attribute Predict Loan Outcome?")
+    st.markdown(
+        "Correlation and chi-square only flag *associations*, not causation. Below, each "
+        "attribute is tested against **Loan Status** directly: ANOVA/eta-squared for numeric "
+        "fields, chi-square/Cramér's V for categorical fields. A low p-value with a low "
+        "effect size means a difference is *detectable* at this sample size but not "
+        "*meaningful* for decisions."
+    )
+
+    dr_numeric = filtered[NUMERIC].columns.tolist() if False else NUMERIC
+    num_results = []
+    for col in NUMERIC:
+        sub = filtered[[col, "loan_status_display"]].dropna()
+        grps = [g[col].values for _, g in sub.groupby("loan_status_display") if len(g) > 1]
+        if len(grps) < 2:
+            continue
+        f_stat, p_val = f_oneway(*grps)
+        grand_mean = sub[col].mean()
+        ss_between = sum(len(g) * (g.mean() - grand_mean) ** 2 for g in grps)
+        ss_total = sum((sub[col] - grand_mean) ** 2)
+        eta_sq = ss_between / ss_total if ss_total else 0
+        num_results.append({
+            "Attribute": col, "Test": "ANOVA (F)", "Statistic": f_stat,
+            "p-value": p_val, "Effect Size (η²)": eta_sq,
+            "Significant (p<0.05)": "Yes" if p_val < 0.05 else "No"
+        })
+    num_df = pd.DataFrame(num_results).sort_values("Effect Size (η²)", ascending=False)
+
+    cat_results = []
+    for col in CATEGORICAL:
+        if col == "loan_status_display":
+            continue
+        ct = pd.crosstab(filtered[col], filtered["loan_status_display"])
+        if ct.shape[0] < 2 or ct.shape[1] < 2:
+            continue
+        chi2, p_val, dof, _ = chi2_contingency(ct)
+        n = ct.sum().sum()
+        k = min(ct.shape) - 1
+        cramers_v = (chi2 / (n * k)) ** 0.5 if k > 0 and n > 0 else 0
+        cat_results.append({
+            "Attribute": col, "Test": "Chi-square (χ²)", "Statistic": chi2,
+            "p-value": p_val, "Effect Size (Cramér's V)": cramers_v,
+            "Significant (p<0.05)": "Yes" if p_val < 0.05 else "No"
+        })
+    cat_df = pd.DataFrame(cat_results).sort_values("Effect Size (Cramér's V)", ascending=False)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**Numeric Attributes vs. Loan Status**")
+        st.dataframe(
+            num_df.style.format({
+                "Statistic": "{:.3f}", "p-value": "{:.4f}", "Effect Size (η²)": "{:.5f}"
+            }),
+            use_container_width=True, hide_index=True
+        )
+
+    with col2:
+        st.markdown("**Categorical Attributes vs. Loan Status**")
+        if not cat_df.empty:
+            st.dataframe(
+                cat_df.style.format({
+                    "Statistic": "{:.3f}", "p-value": "{:.4f}",
+                    "Effect Size (Cramér's V)": "{:.5f}"
+                }),
+                use_container_width=True, hide_index=True
+            )
+        else:
+            st.info("Not enough category variety in the current filter selection to test.")
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=num_df["Attribute"], y=num_df["Effect Size (η²)"],
+        name="Numeric (η²)", marker_color=NAVY
+    ))
+    if not cat_df.empty:
+        fig.add_trace(go.Bar(
+            x=cat_df["Attribute"], y=cat_df["Effect Size (Cramér's V)"],
+            name="Categorical (Cramér's V)", marker_color=BANK_RED
+        ))
+    fig.update_layout(
+        title="Effect Size by Attribute (higher = stronger relationship with Loan Status)",
+        yaxis_title="Effect Size",
+    )
+    banking_layout(fig)
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown(
+        "**Interpretation guide:** effect sizes are conventionally read as "
+        "small (η² / Cramér's V ≈ 0.01), medium (≈ 0.06), and large (≈ 0.14+). "
+        "If every bar above sits near zero, it means loan outcome in this dataset is "
+        "effectively independent of applicant attributes — consistent with randomly "
+        "assigned or synthetic outcome labels rather than real underwriting decisions."
     )
 
 st.divider()
